@@ -78,7 +78,7 @@ def _run_ragas(settings: Settings, answers: list[dict[str, Any]]) -> dict[str, A
             shim = types.ModuleType("langchain_community.chat_models.vertexai")
             shim.ChatVertexAI = type("ChatVertexAI", (), {})
             sys.modules["langchain_community.chat_models.vertexai"] = shim
-        from ragas import evaluate
+        from ragas import RunConfig, evaluate
         from ragas.metrics import answer_relevancy, context_precision, context_recall, faithfulness
 
         dataset = Dataset.from_dict(
@@ -94,8 +94,19 @@ def _run_ragas(settings: Settings, answers: list[dict[str, Any]]) -> dict[str, A
             metrics=[answer_relevancy, context_precision, context_recall, faithfulness],
             llm=build_llm(settings=settings, temperature=0.0),
             embeddings=MiniLMEmbeddings(settings.embedding_model),
+            # Thinking models (vd gemini-3.x) cham: tang timeout va giam concurrency de tranh TimeoutError/429.
+            run_config=RunConfig(timeout=600, max_workers=4, max_retries=5, max_wait=60),
         )
-        return dict(result)
+        # EvaluationResult (ragas 0.3) khong co .keys(), nen dict(result) raise KeyError(0).
+        scores = result.to_pandas()
+        names = [metric.name for metric in (answer_relevancy, context_precision, context_recall, faithfulness)]
+        summary = {}
+        for name in names:
+            if name in scores:
+                value = scores[name].mean()
+                summary[name] = None if value != value else round(float(value), 4)  # NaN -> null
+                summary[f"{name}_failed_samples"] = int(scores[name].isna().sum())
+        return summary
     except Exception as exc:  # pragma: no cover
         return {"error": f"Ragas evaluation failed: {exc}"}
 

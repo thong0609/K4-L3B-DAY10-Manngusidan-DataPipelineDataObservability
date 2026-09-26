@@ -135,7 +135,8 @@ def run_corruption_flow_pipeline(settings: Settings) -> dict[str, Any]:
             "repaired": repaired_bundle.answers,
         },
         repair_info={
-            "source": str(paths.raw_records_json),
+
+            "source": paths.raw_records_json.relative_to(paths.project_dir).as_posix(),
             "rows": len(repaired_df),
             "idempotent": idempotent,
         },
