@@ -10,8 +10,9 @@ from evaluation.metrics import evaluate_pipeline
 from evaluation.testset import build_test_set
 from ingestion.cleaning import build_clean_dataframe
 from ingestion.crossref import PaperRecord, fetch_source_records, load_raw_records
-from observability.quality import build_freshness_report, run_data_quality_checks
+from observability.quality import build_freshness_report
 from observability.reporting import generate_phase1_report
+from observability.self_healing import run_quality_gate_with_self_healing
 from retrieval.index import LocalEmbeddingIndex
 from retrieval.qa import answer_question
 
@@ -73,6 +74,14 @@ def run_phase1_pipeline(settings: Settings) -> dict[str, Any]:
     save_clean_artifacts(df, settings.paths.clean_csv, settings.paths.clean_json)
     _log("clean", f"{len(df)} clean rows -> {settings.paths.clean_csv}")
 
+    # 2b. Quality gate truoc khi index: FAIL -> tu dong repair (bonus B2), khong index du lieu xau.
+    healing = run_quality_gate_with_self_healing(df, settings, "baseline", repaired_report_name="baseline")
+    if healing.healed:
+        df = healing.df
+        save_clean_artifacts(df, settings.paths.clean_csv, settings.paths.clean_json)
+    quality = healing.final_quality
+    _log("gate", f"success={quality['success']} self_heal_action={healing.action}")
+
     # 3. Index ChromaDB
     index = LocalEmbeddingIndex.build(df, settings, settings.paths.embeddings_json)
     _log("index", f"{len(index.documents)} docs in Chroma collection '{index.collection_name}'")
@@ -92,8 +101,7 @@ def run_phase1_pipeline(settings: Settings) -> dict[str, Any]:
     metrics = bundle.summary
     _log("evaluate", f"hit_rate={metrics['retrieval_hit_rate']:.3f} token_f1={metrics['mean_token_f1']:.3f}")
 
-    # 6. Quality gate + freshness
-    quality = run_data_quality_checks(df, settings, "baseline")
+    # 6. Freshness report (quality gate da chay o buoc 2b)
     freshness = build_freshness_report(df, settings, settings.paths.freshness_report)
     _log("quality", f"success={quality['success']} is_fresh={freshness['is_fresh']}")
 
@@ -111,6 +119,7 @@ def run_phase1_pipeline(settings: Settings) -> dict[str, Any]:
         "embedding_model": settings.embedding_model,
         "collection_name": index.collection_name,
         "test_set_size": len(test_set),
+        "self_healing_action": healing.action,
         "demo": demo,
     }
     generate_phase1_report(settings.paths.baseline_report, source_summary, metrics, quality, freshness)

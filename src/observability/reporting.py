@@ -240,8 +240,10 @@ def _analysis(
     ]
     if repair_info:
         lines.append(
-            f"- **Repair:** rebuilt {repair_info.get('rows')} rows from the raw snapshot `{repair_info.get('source')}` "
-            f"without calling the API (idempotent={repair_info.get('idempotent')})."
+            f"- **Repair:** triggered {repair_info.get('trigger', 'manually')} with action "
+            f"`{repair_info.get('action', 'rebuild_from_raw_snapshot')}`: rebuilt {repair_info.get('rows')} rows from the raw "
+            f"snapshot `{repair_info.get('source')}` without calling the API (idempotent={repair_info.get('idempotent')}); "
+            f"the repaired data was re-validated by the gate before being indexed."
         )
     lines.append(
         f"- **Recovery:** repaired hit rate {repaired['retrieval_hit_rate']:.2%} / token F1 {repaired['mean_token_f1']:.2%} "
