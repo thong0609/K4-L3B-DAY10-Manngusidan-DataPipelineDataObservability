@@ -18,10 +18,8 @@
 
 | Module/deliverable | File/hàm phụ trách | Input nhận vào | Output bàn giao | Trạng thái |
 | --- | --- | --- | --- | --- |
-| Baseline Pipeline | `src/pipelines/phase1.py` — `main()` | Settings, raw records | `data/reports/phase1_report.md`, `data/results/baseline_metrics.json` | Hoàn thành |
-| Corruption Flow | `src/pipelines/corruption_flow.py` — `main()` | Clean dataset, eval set | `data/reports/corruption_report.md`, bảng 3-state | Hoàn thành |
-| Phase 1 Report | `_build_phase1_report()` | df, metrics, QR, FR | `data/reports/phase1_report.md` (113 dòng, 6 mục) | Hoàn thành |
-| Comparison Report | `_build_comparison_report()` | 3 bộ metrics | `data/reports/corruption_report.md` | Hoàn thành |
+| Baseline Pipeline | `src/pipelines/phase1.py` — `run_phase1_pipeline()` | Settings, raw records | `data/reports/phase1_report.md`, `baseline_metrics.json` | Hoàn thành |
+| Corruption Flow | `src/pipelines/corruption_flow.py` — `run_corruption_flow_pipeline()` | Clean dataset, eval set | `data/reports/corruption_report.md`, bảng 3-state | Hoàn thành |
 
 ### Việc hỗ trợ ngoài phạm vi chính
 
