@@ -1,7 +1,7 @@
 {
   "backend": "chroma",
   "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
-  "persist_path": "D:\\VinAI\\K4-L3B-DAY10-Manngusidan-DataPipelineDataObservability\\data\\chroma",
+  "persist_path": "D:\\GitHub\\LAB\\K4-L3B-DAY10-Manngusidan-DataPipelineDataObservability\\data\\chroma",
   "collection_name": "papers-baseline",
   "documents": [
     {

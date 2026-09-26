@@ -10,8 +10,8 @@
 | source_filter | from-pub-date:2026-03-30,has-abstract:true |
 | raw_records | 24 |
 | clean_rows | 24 |
-| run_date | 2026-09-26T04:47:54.614754+00:00 |
-| llm_provider | mock |
+| run_date | 2026-09-26T05:20:29.107827+00:00 |
+| llm_provider | gemini |
 | embedding_model | sentence-transformers/all-MiniLM-L6-v2 |
 | collection_name | papers-baseline |
 | test_set_size | 10 |
