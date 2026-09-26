@@ -32,6 +32,7 @@ Phần của tôi nằm giữa dữ liệu và đánh giá: nhận clean datafra
 | --- | --- | --- |
 | Debug tích hợp test set ↔ QA | `retrieval/qa.py` (Đinh Văn Bình) | Đồng bộ template câu hỏi với từ khóa của `qa.py`; câu `authors`/`categories` trả về đúng trường (baseline token F1 = 1.0) |
 | Phát hiện dữ liệu live thiếu `categories` | `ingestion/crossref.py` (Trần Gia Khánh) | Đề xuất dùng snapshot mặc định, chỉ gọi API khi `REFRESH_SOURCE=1` |
+| Bật đánh giá Ragas | `evaluation/metrics.py` | Sửa lỗi `dict(result)` (`KeyError: 0`) với ragas 0.3.1, cài `pillow` còn thiếu, thêm `RunConfig` chống timeout; từng metric chạy được trên 1 mẫu, nhưng lần chạy đầy đủ bị chặn bởi quota Gemini free tier (20 request/ngày/model) |
 
 ## 3. Kết quả theo vai trò
 

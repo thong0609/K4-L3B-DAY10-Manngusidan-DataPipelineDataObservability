@@ -63,7 +63,7 @@ Crossref API (REFRESH_SOURCE=1) hoặc snapshot data/raw/crossref_response.json
 | Biến/cấu hình | Giá trị sử dụng |
 | --- | --- |
 | `LLM_PROVIDER` | `gemini` |
-| `LLM_MODEL` | `gemini-3.6-flash` (quota hết → judge dùng heuristic fallback) |
+| `LLM_MODEL` | `gemini-3.6-flash` khi sinh artifact nộp bài (quota hết → judge dùng heuristic fallback). Đã thử `gemini-2.5-flash`/`gemini-2.5-flash-lite` (404: không còn cho tài khoản mới) và `gemini-3.8-flash` (cũng giới hạn 20 request/ngày) |
 | Embedding model | `sentence-transformers/all-MiniLM-L6-v2` |
 | Số lượng Crossref records | 24 (`max_results=24`) |
 | Retrieval `top_k` | 4 |
@@ -166,7 +166,7 @@ Test set được giữ nguyên để mọi thay đổi metric chỉ đến từ
 | `mean_token_f1` | 1.0 | QA trích xuất trực tiếp từ metadata nên khớp tuyệt đối ground truth |
 | `judge_accuracy` | 1.0 | Heuristic fallback (F1 ≥ 0.5 → correct), không phải LLM judge |
 | `mean_judge_score` | 5 | Heuristic fallback (F1 ≥ 0.95 → 5) |
-| Ragas | N/A | Không bật `RUN_RAGAS=1` (chậm, và LLM đang hết quota) |
+| Ragas | N/A | Đã chạy thử `RUN_RAGAS=1` nhưng không hoàn thành: free tier Gemini chỉ cho 20 request/ngày/model, trong khi một lần chạy đủ 3 trạng thái cần khoảng 300 lời gọi LLM (4 metric × 10 câu × 3 trạng thái + judge) → 429 `RESOURCE_EXHAUSTED`. |
 
 ## 8. Data quality và freshness
 
@@ -233,11 +233,18 @@ Kết luận nhân quả (đối chiếu `data/results/corruption_log.json` vớ
 - **Cách xử lý:** Đồng bộ template câu hỏi với từ khóa của `qa.py`; `fetch_source_records` mặc định dùng lại snapshot (chỉ gọi API khi `REFRESH_SOURCE=1`); `build_test_set` fallback sang dạng câu hỏi khác kèm cảnh báo khi thiếu dữ liệu.
 - **Cách xác minh:** `python script/run_phase1.py` → `data/eval/test_set.json` có đủ 4 dạng; baseline token F1 = 1.0.
 
+### Vấn đề tích hợp thứ hai: bật Ragas
+
+- **Triệu chứng:** `RUN_RAGAS=1` luôn trả `{"error": "Ragas evaluation failed: No module named 'PIL'"}`, sau khi cài Pillow thì thành `"Ragas evaluation failed: 0"`.
+- **Nguyên nhân:** (1) `pillow` có trong `uv.lock` nhưng chưa được cài vào `.venv`; (2) `evaluation/metrics.py` gọi `dict(result)` trên `EvaluationResult` của ragas 0.3.1 — object này không có `.keys()` nên `dict()` duyệt theo chỉ số và raise `KeyError(0)`; (3) model Gemini 3.x là thinking model, chạy song song mặc định bị `TimeoutError`.
+- **Cách xử lý:** cài `pillow==12.2.0` theo lockfile; lấy điểm trung bình từng metric qua `result.to_pandas()` (NaN → `null`, kèm số mẫu lỗi); thêm `RunConfig(timeout=600, max_workers=4, max_retries=5)`.
+- **Cách xác minh:** chạy từng metric trên 1 mẫu cho ra điểm hợp lệ cho cả 4 metric. Lần chạy đầy đủ bị chặn bởi quota (xem mục 7 và 12).
+
 ## 12. Giới hạn và hướng cải thiện
 
 | Giới hạn hiện tại | Ảnh hưởng | Hướng cải thiện có thể kiểm chứng |
 | --- | --- | --- |
-| LLM judge hết quota (429) → heuristic fallback | `judge_*` chỉ phản ánh token F1 | Dùng provider khác/quota mới, chạy lại và so sánh `judge_accuracy` với heuristic |
+| LLM judge và Ragas bị chặn bởi quota free tier (20 request/ngày/model) → judge dùng heuristic fallback, Ragas không có số liệu | `judge_*` chỉ phản ánh token F1; thiếu faithfulness/context precision/recall | Dùng key có billing hoặc provider khác, chạy lại `RUN_RAGAS=1` cho cả 3 trạng thái và so sánh `judge_accuracy` với heuristic |
 | 4 expectation không bắt `inject_noise` và `truncate_title` | Lỗi làm sai câu trả lời vẫn lọt gate | Thêm expectation độ dài `title` ≥ 15 và regex cấm ký tự rác trong `summary`; kỳ vọng corrupted gate FAIL thêm 2 check |
 | Corruption chọn dòng ngẫu nhiên, ít trùng với 10 paper trong test set | Mức sụt metric agent nhỏ (hit 0.8) so với mức hỏng dữ liệu (21/24 paper) | Tăng số câu hỏi hoặc đo theo từng paper bị ảnh hưởng |
 | QA trích xuất trực tiếp metadata (không sinh bằng LLM) | Baseline luôn 1.0, khó đánh giá chất lượng sinh câu trả lời | Bật agent LLM + Ragas (`RUN_RAGAS=1`) khi có quota |
