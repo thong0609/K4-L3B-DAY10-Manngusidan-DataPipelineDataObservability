@@ -23,6 +23,9 @@
 | Benchmark test set | `src/evaluation/testset.py` — `build_test_set` | `data/clean/papers_clean.json` | `data/eval/test_set.json` (10 câu, 4 dạng) | Hoàn thành |
 | Data corruption suite | `src/ingestion/corruption.py` — `corrupt_clean_dataframe` | Clean dataframe | Corrupted dataframe, `data/results/corruption_log.json` | Hoàn thành |
 | Báo cáo | `src/observability/reporting.py` — `generate_phase1_report`, `generate_corruption_report` | Metrics, quality, freshness, answers, corruption log | `data/reports/phase1_report.md`, `data/reports/corruption_report.md` | Hoàn thành |
+| Bonus B2 — Self-healing gate | `src/observability/self_healing.py` — `run_quality_gate_with_self_healing`; tích hợp vào `phase1.py`, `corruption_flow.py` | Dataframe bất kỳ trạng thái, raw snapshot | Dataframe đã qua gate, `data/results/self_healing_log.json` | Hoàn thành |
+| Bonus B1 — Observability dashboard | `src/observability/dashboard.py`, `script/build_dashboard.py` | Artifacts trong `data/` | `data/reports/dashboard.html` | Hoàn thành |
+| Bonus B3 — Test suite + CI | `tests/` (64 test), `script/run_tests.py`, `.github/workflows/ci.yml` | Toàn bộ `src/` | Coverage 98.90%, gate ≥ 80% | Hoàn thành |
 
 Phần của tôi nằm giữa dữ liệu và đánh giá: nhận clean dataframe từ phần Ingestion/Cleaning (Trần Gia Khánh), sinh test set mà phần RAG (Đinh Văn Bình) dùng để đo retrieval, và cung cấp quality gate, corruption và report mà pipeline điều phối (Tô Huy Thông) gọi trong `phase1.py` và `corruption_flow.py`.
 
@@ -43,6 +46,9 @@ Phần của tôi nằm giữa dữ liệu và đánh giá: nhận clean datafra
 | Sinh test set 10 câu | `testset.py` | summary 3, authors 3, date 2, categories 2; 10 paper khác nhau | `data/eval/test_set.json` |
 | Tiêm 6 loại corruption | `corruption.py` | 24 → 22 dòng, 21 paper bị ảnh hưởng, log `before`/`after` | `data/results/corruption_log.json` |
 | Báo cáo 3 trạng thái | `reporting.py` | Bảng metric + recovery, bảng GX, freshness, breakdown theo dạng câu hỏi, danh sách câu bị suy giảm | `data/reports/corruption_report.md` |
+| Tự động repair khi gate FAIL (B2) | `self_healing.py` | Corrupted gate FAIL → `rebuild_from_raw_snapshot` tự chạy → gate PASS (24 dòng, stale 4.17%), `resolved=true` | `data/results/self_healing_log.json`, dòng `[phase2] self-heal` trên console |
+| Dashboard quan sát dữ liệu (B1) | `dashboard.py` | Trạng thái gate 3 trạng thái, ma trận check GX + freshness, biểu đồ metric, phân bố tuổi bài báo so với SLA 180 ngày, sự kiện corruption, lịch sử self-healing | `data/reports/dashboard.html` |
+| Bộ test tự động (B3) | `tests/`, `script/run_tests.py` | 64 passed, coverage 98.90% trên `src/` | `python script/run_tests.py` |
 
 Output cụ thể: bảng Quality Gate trong `data/reports/corruption_report.md` cho thấy gate chuyển PASS → FAIL → PASS qua 3 trạng thái, và phần "Questions degraded on corrupted data" chỉ ra đúng 2 câu bị ảnh hưởng (eval_003, eval_004).
 
@@ -81,6 +87,18 @@ python script/run_corruption_flow.py
 - **Kết quả thực tế:** `Quality check status = True`; `Sinh được 10 câu hỏi test`; corruption flow exit 0, gate PASS / FAIL / PASS.
 - **Artifact/log:** `data/quality/`, `data/eval/test_set.json`, `data/results/corruption_log.json`, `data/reports/corruption_report.md`.
 
+### Phần điểm cộng
+
+- **B2 — Self-healing:** `run_quality_gate_with_self_healing` chạy gate; nếu FAIL thì thử lần lượt `rebuild_from_raw_snapshot` (rebuild từ `crossref_records.json`, chạy cleaning 2 lần để kiểm tra idempotent) rồi `refetch_source` (gọi lại Crossref với `REFRESH_SOURCE`, API lỗi thì fallback raw response). Mỗi kết quả phải qua lại gate; chiến lược bị lỗi (exception) được ghi lại và bỏ qua sang chiến lược tiếp theo. Không chiến lược nào PASS thì raise `DataQualityGateError` để chặn dữ liệu xấu trước khi index. Tôi gắn gate vào `phase1.py` **trước bước index** và thay lời gọi repair thủ công trong `corruption_flow.py` bằng gate này, nên repair do gate FAIL kích hoạt chứ không do người chạy.
+- **B1 — Dashboard:** đọc artifacts (clean/corrupted/repaired JSON, metrics, quality reports, corruption log, self-healing log) và sinh một file HTML tĩnh với SVG inline, không cần server hay thư viện ngoài. Mỗi biểu đồ có tooltip khi hover/focus và bảng dữ liệu thay thế; trạng thái PASS/FAIL dùng icon + chữ, không chỉ dựa vào màu; palette 3 màu được kiểm tra colorblind-safety cho cả light và dark mode.
+- **B3 — Test:** fixture tạo project tạm trong `tmp_path` với snapshot mẫu, ép `LLM_PROVIDER=mock`, chặn `requests.get` và đóng băng thời gian (2026-09-26) để test tái lập được và chạy offline. Các module ngoài (Ragas, agent) được thay bằng module giả để kiểm tra cả nhánh thành công và nhánh lỗi. `script/run_tests.py` chạy toàn bộ với `--cov-fail-under=80`; GitHub Actions chạy lại trên mỗi push vào `main`.
+
+```bash
+python script/run_corruption_flow.py   # [phase2] self-heal  auto action=rebuild_from_raw_snapshot -> 24 rows, gate=True
+python script/build_dashboard.py       # data/reports/dashboard.html
+python script/run_tests.py             # 64 passed, Total coverage: 98.90%
+```
+
 Tôi cũng tự kiểm thử gate bằng một dataframe làm bẩn thủ công (thêm 2 dòng trùng, 3 summary "short", 9 dòng `age_days = 400`, 1 title null): gate trả `success=False` với 3 expectation FAIL và `is_fresh=False`.
 
 ## 5. Một quyết định kỹ thuật quan trọng
@@ -108,7 +126,7 @@ Tôi cũng tự kiểm thử gate bằng một dataframe làm bẩn thủ công 
 2. Mỗi câu hỏi có DOI của paper sinh ra nó. Retrieval hit = DOI đó có nằm trong top-k tài liệu truy xuất hay không; token F1 so khớp câu trả lời với ground truth; judge chấm 1–5 (trong lần chạy này là heuristic fallback vì Gemini hết quota).
 3. Quality checks kiểm tra cấu trúc và tính hợp lệ tại một thời điểm (số dòng, null, trùng, độ dài). Freshness đo tuổi dữ liệu so với thời điểm chạy: dữ liệu có thể hợp lệ hoàn toàn nhưng vẫn quá cũ, như corruption `stale_date`.
 4. Nếu câu hỏi thay đổi thì không biết metric thay đổi vì dữ liệu hay vì câu hỏi. Giữ cùng test set (và cùng seed corruption) để sự khác biệt chỉ đến từ trạng thái dữ liệu.
-5. Repair thành công khi: gate repaired PASS (`repaired_quality_report.json`), freshness trở về 4.17%, và `repaired_metrics.json` bằng baseline (hit rate 1.0, token F1 1.0), cùng với `idempotent=True`.
+5. Repair thành công khi: gate repaired PASS (`repaired_quality_report.json`), freshness trở về 4.17%, và `repaired_metrics.json` bằng baseline (hit rate 1.0, token F1 1.0), cùng với `idempotent=True`. Với self-healing, `data/results/self_healing_log.json` còn ghi lại lỗi đã phát hiện, chiến lược đã thử và `resolved=true`.
 
 ## 8. Phân tích kết quả
 
@@ -130,6 +148,8 @@ Tôi cũng tự kiểm thử gate bằng một dataframe làm bẩn thủ công 
 
 Corruption ảnh hưởng rõ nhất đến agent là `truncate_title`: `qa.py` ưu tiên tra exact title, title bị cắt còn 7 ký tự làm lookup thất bại, semantic search trả về paper khác nên eval_003 trả lời sai ngày (F1 = 0). Đáng chú ý là gate hiện tại không có expectation nào bắt lỗi này.
 
+Khi viết test cho retrieval, tôi phát hiện semantic search thuần có thể xếp một paper có tiêu đề tương tự lên trên cả paper được hỏi đúng tiêu đề. Điều này giải thích vì sao `qa.py` ưu tiên exact-title lookup, và vì sao `truncate_title` gây hại nhiều như vậy: mất lookup là rơi về semantic search vốn không đủ chính xác.
+
 Kết quả khác kỳ vọng: (1) eval_004 retrieval miss (paper bị `drop_latest_records`) nhưng token F1 = 1.0, vì một paper khác có cùng categories. Tôi kiểm tra bằng cách đối chiếu `retrieved_doc_ids` trong `corrupted_answers.json` với `corruption_log.json`. Điều này cho thấy chỉ nhìn F1 có thể che mất lỗi retrieval. (2) `inject_noise` và `blank_summary` không làm giảm metric agent vì các paper bị chọn không trùng với câu hỏi `summary` nào; mức giảm tổng (0.8) nhỏ hơn nhiều so với mức hỏng dữ liệu (21/24 paper).
 
 ## 9. Điều học được và hướng cải thiện
@@ -142,7 +162,7 @@ Kết quả khác kỳ vọng: (1) eval_004 retrieval miss (paper bị `drop_lat
 
 ### Nếu có thêm thời gian
 
-Thêm 2 expectation: `title` dài tối thiểu 15 ký tự và `summary` không khớp regex ký tự rác (`#{3,}|@{3,}|<[^>]+>|�`). Cách đo: chạy lại `run_corruption_flow.py`, kỳ vọng corrupted gate FAIL thêm 2 check (truncate_title 3 dòng, inject_noise 3 dòng) trong khi baseline vẫn PASS.
+Thêm 2 expectation: `title` dài tối thiểu 15 ký tự và `summary` không khớp regex ký tự rác (`#{3,}|@{3,}|<[^>]+>|\ufffd`). Cách đo: chạy lại `run_corruption_flow.py`, kỳ vọng corrupted gate FAIL thêm 2 check (truncate_title 3 dòng, inject_noise 3 dòng) trong khi baseline vẫn PASS.
 
 ## 10. Cam kết của thành viên
 

@@ -16,7 +16,7 @@
 | 1 | Tô Huy Thông | 2A202602608 | Trưởng nhóm / Pipeline Integrator | `core/`, `pipelines/phase1.py`, `pipelines/corruption_flow.py` |
 | 2 | Trần Gia Khánh | 2A202602689 | Data Foundation & Recovery | `ingestion/crossref.py`, `ingestion/cleaning.py`, `data/raw/`, repair từ raw snapshot |
 | 3 | Đinh Văn Bình | 2A202602830 | RAG & Vector Index | `retrieval/index.py`, `retrieval/embeddings.py`, 3 collection ChromaDB |
-| 4 | Ngô Đinh Minh Nhật | 2A202602569 | Observability & Evaluation | `observability/quality.py`, `evaluation/testset.py`, `observability/reporting.py`, `ingestion/corruption.py` |
+| 4 | Ngô Đinh Minh Nhật | 2A202602569 | Observability & Evaluation | `observability/quality.py`, `evaluation/testset.py`, `observability/reporting.py`, `ingestion/corruption.py`; bonus: `observability/self_healing.py`, `observability/dashboard.py`, `tests/` + CI |
 
 ## 2. Tóm tắt kết quả
 
@@ -62,7 +62,7 @@ Crossref API (REFRESH_SOURCE=1) hoặc snapshot data/raw/crossref_response.json
 
 | Biến/cấu hình | Giá trị sử dụng |
 | --- | --- |
-| `LLM_PROVIDER` | `gemini` |
+| `LLM_PROVIDER` | `gemini` trong `.env`; lần chạy sinh artifact cuối cùng dùng `LLM_PROVIDER=mock` (Gemini hết quota nên judge ở mọi lần chạy đều là heuristic fallback — số liệu giống hệt lần chạy với `gemini`) |
 | `LLM_MODEL` | `gemini-3.6-flash` khi sinh artifact nộp bài (quota hết → judge dùng heuristic fallback). Đã thử `gemini-2.5-flash`/`gemini-2.5-flash-lite` (404: không còn cho tài khoản mới) và `gemini-3.8-flash` (cũng giới hạn 20 request/ngày) |
 | Embedding model | `sentence-transformers/all-MiniLM-L6-v2` |
 | Số lượng Crossref records | 24 (`max_results=24`) |
@@ -81,6 +81,8 @@ python -m pip install -e .
 ```bash
 python script/run_phase1.py
 python script/run_corruption_flow.py
+python script/build_dashboard.py   # dựng lại dashboard từ artifact hiện có
+python script/run_tests.py         # 64 test + coverage gate 80%
 ```
 
 Đặt `REFRESH_SOURCE=1` để gọi lại Crossref API thay vì dùng snapshot; `REFRESH_TEST_SET=1` để sinh lại test set.
@@ -89,8 +91,9 @@ python script/run_corruption_flow.py
 
 | Lệnh | Trạng thái | Thời điểm chạy gần nhất | Bằng chứng |
 | --- | --- | --- | --- |
-| Baseline pipeline | Thành công (exit 0) | 2026-09-26 10:33 | `data/results/baseline_metrics.json`, `data/reports/phase1_report.md` |
-| Corruption flow | Thành công (exit 0) | 2026-09-26 10:39 | `data/results/{corrupted,repaired}_metrics.json`, `data/reports/corruption_report.md` |
+| Baseline pipeline | Thành công (exit 0) | 2026-09-26 11:47 | `data/results/baseline_metrics.json`, `data/reports/phase1_report.md` |
+| Corruption flow | Thành công (exit 0) | 2026-09-26 11:50 | `data/results/{corrupted,repaired}_metrics.json`, `data/results/self_healing_log.json`, `data/reports/corruption_report.md`, `data/reports/dashboard.html` |
+| Test suite | 64 passed, coverage 98.90% | 2026-09-26 11:45 | `python script/run_tests.py` |
 
 ## 5. Ingestion, cleaning và data contract
 
@@ -139,7 +142,7 @@ python script/run_corruption_flow.py
 | Embedding model | `all-MiniLM-L6-v2` |
 | Vector store/collection | ChromaDB cosine: `papers-baseline`, `papers-corrupted`, `papers-repaired` |
 | Retrieval `top_k` | 4 |
-| LLM provider/model | Gemini (`gemini-3.6-flash`) — bị 429, judge dùng heuristic fallback |
+| LLM provider/model | Gemini (`gemini-3.6-flash`) bị 429 → judge dùng heuristic fallback; lần chạy cuối dùng `mock` cho cùng kết quả |
 | Test set dùng chung cho ba trạng thái | `data/eval/test_set.json` (sha1 `1ad06a21…`) |
 
 Test set được giữ nguyên để mọi thay đổi metric chỉ đến từ dữ liệu (corruption/repair), không đến từ câu hỏi. Pipeline phase 1 chỉ sinh lại test set khi một ground-truth DOI không còn trong corpus hoặc khi đặt `REFRESH_TEST_SET=1`.
@@ -238,9 +241,48 @@ Kết luận nhân quả (đối chiếu `data/results/corruption_log.json` vớ
 - **Triệu chứng:** `RUN_RAGAS=1` luôn trả `{"error": "Ragas evaluation failed: No module named 'PIL'"}`, sau khi cài Pillow thì thành `"Ragas evaluation failed: 0"`.
 - **Nguyên nhân:** (1) `pillow` có trong `uv.lock` nhưng chưa được cài vào `.venv`; (2) `evaluation/metrics.py` gọi `dict(result)` trên `EvaluationResult` của ragas 0.3.1 — object này không có `.keys()` nên `dict()` duyệt theo chỉ số và raise `KeyError(0)`; (3) model Gemini 3.x là thinking model, chạy song song mặc định bị `TimeoutError`.
 - **Cách xử lý:** cài `pillow==12.2.0` theo lockfile; lấy điểm trung bình từng metric qua `result.to_pandas()` (NaN → `null`, kèm số mẫu lỗi); thêm `RunConfig(timeout=600, max_workers=4, max_retries=5)`.
-- **Cách xác minh:** chạy từng metric trên 1 mẫu cho ra điểm hợp lệ cho cả 4 metric. Lần chạy đầy đủ bị chặn bởi quota (xem mục 7 và 12).
+- **Cách xác minh:** chạy từng metric trên 1 mẫu cho ra điểm hợp lệ cho cả 4 metric. Lần chạy đầy đủ bị chặn bởi quota (xem mục 7 và 13).
 
-## 12. Giới hạn và hướng cải thiện
+## 12. Phần điểm cộng (Bonus)
+
+| Hạng mục | Thực hiện | Bằng chứng |
+| --- | --- | --- |
+| B1 — Observability Dashboard | Ngô Đinh Minh Nhật | `data/reports/dashboard.html` |
+| B2 — Automated Self-Healing | Ngô Đinh Minh Nhật | `data/results/self_healing_log.json`, dòng `[phase2] self-heal` trên console |
+| B3 — Test suite + CI | Ngô Đinh Minh Nhật | `python script/run_tests.py` → 64 passed, coverage 98.90%; `.github/workflows/ci.yml` |
+
+### B2 — Automated Self-Healing Pipeline
+
+`src/observability/self_healing.py` — `run_quality_gate_with_self_healing(df, settings, stage)`:
+
+1. Chạy Quality Gate (GX 1.x + freshness). PASS → dùng dữ liệu như cũ.
+2. FAIL → **tự động** thử lần lượt các chiến lược repair, mỗi kết quả phải qua lại gate:
+   `rebuild_from_raw_snapshot` (rebuild idempotent từ `data/raw/crossref_records.json`, không gọi API) → `refetch_source` (gọi lại Crossref, fallback raw response nếu API lỗi).
+3. Không chiến lược nào PASS → raise `DataQualityGateError`, chặn dữ liệu xấu trước khi index vào ChromaDB.
+4. Mọi sự cố ghi vào `data/results/self_healing_log.json` (lỗi phát hiện, từng lần thử, kết quả).
+
+Gate được gắn vào cả hai pipeline: `phase1.py` chạy gate **trước khi index** (dữ liệu sạch → `self_heal_action=none`), và `corruption_flow.py` không còn gọi repair thủ công — repair được kích hoạt bởi gate FAIL. Bằng chứng lần chạy cuối: gate corrupted FAIL (unique `paper_id`, độ dài `summary`, stale 40.91%) → `rebuild_from_raw_snapshot` → gate PASS (24 dòng, stale 4.17%, `idempotent=True`), `resolved=true` trong log.
+
+### B1 — Interactive Observability Dashboard
+
+`src/observability/dashboard.py` sinh `data/reports/dashboard.html` (HTML tĩnh, không cần server/CDN) ở cuối mỗi lần chạy corruption flow, hoặc qua `python script/build_dashboard.py`:
+
+- Ô trạng thái Quality Gate cho 3 trạng thái và số sự cố self-healing.
+- Ma trận 6 check GX + Freshness SLA × 3 trạng thái (PASS/FAIL kèm icon, không chỉ dựa vào màu).
+- Biểu đồ cột Hit rate / Token F1 / Judge accuracy theo trạng thái.
+- Phân bố tuổi bài báo (bin 30 ngày) cho từng trạng thái với vạch SLA 180 ngày — thấy rõ drift khi `stale_date` đẩy 7 bài sang vùng > 365 ngày.
+- Biểu đồ số sự kiện corruption và bảng lịch sử self-healing.
+- Tooltip khi hover/focus, bảng dữ liệu thay thế cho mỗi biểu đồ, hỗ trợ light/dark mode; palette 3 màu đã qua kiểm tra colorblind-safety.
+
+### B3 — End-to-End Automated Test Suite
+
+`tests/` gồm 64 test pytest chạy offline (LLM `mock`, chặn mạng, thời gian đóng băng, project tạm trong `tmp_path` với snapshot mẫu): ingestion (parse, retry/429 fallback, không ghi đè snapshot), cleaning, GX suite + freshness, test set, 6 corruption, self-healing (kể cả leo thang và chặn), retrieval/Chroma, QA routing, evaluation/judge/Ragas (module giả), LLM router đủ provider, agent tools, report, dashboard, và end-to-end phase1 → corruption flow.
+
+- **Coverage: 98.90%** trên toàn bộ `src/` (1271 statements), gate `--cov-fail-under=80`.
+- One-click: `python script/run_tests.py` (in coverage + ghi `htmlcov/`).
+- CI: `.github/workflows/ci.yml` chạy suite trên GitHub Actions cho mọi push vào `main` và pull request.
+
+## 13. Giới hạn và hướng cải thiện
 
 | Giới hạn hiện tại | Ảnh hưởng | Hướng cải thiện có thể kiểm chứng |
 | --- | --- | --- |
@@ -249,7 +291,7 @@ Kết luận nhân quả (đối chiếu `data/results/corruption_log.json` vớ
 | Corruption chọn dòng ngẫu nhiên, ít trùng với 10 paper trong test set | Mức sụt metric agent nhỏ (hit 0.8) so với mức hỏng dữ liệu (21/24 paper) | Tăng số câu hỏi hoặc đo theo từng paper bị ảnh hưởng |
 | QA trích xuất trực tiếp metadata (không sinh bằng LLM) | Baseline luôn 1.0, khó đánh giá chất lượng sinh câu trả lời | Bật agent LLM + Ragas (`RUN_RAGAS=1`) khi có quota |
 
-## 13. Checklist trước khi nộp
+## 14. Checklist trước khi nộp
 
 - [x] Thông tin nhóm và repository chính xác.
 - [x] Phân công khớp với module, artifact và kết quả thực tế. 

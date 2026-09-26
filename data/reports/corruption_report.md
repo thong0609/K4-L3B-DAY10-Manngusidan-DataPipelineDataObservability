@@ -65,5 +65,5 @@ Rows: 24 → 22 (seed=42), affected papers: 21
 
 - **Silent failure:** the corrupted pipeline completed without any exception, yet retrieval hit rate fell by 20.00% and mean token F1 by 10.00%. Nothing in the serving path signals the damage.
 - **Observability catches it:** the GX gate on corrupted data returned `FAIL` (failed: expect_column_values_to_be_unique, expect_column_value_lengths_to_be_between); freshness stale ratio 40.91% vs SLA 25% → is_fresh=`False`.
-- **Repair:** rebuilt 24 rows from the raw snapshot `data/raw/crossref_records.json` without calling the API (idempotent=True).
+- **Repair:** triggered automatically by the failed quality gate with action `rebuild_from_raw_snapshot`: rebuilt 24 rows from the raw snapshot `data/raw/crossref_records.json` without calling the API (idempotent=True); the repaired data was re-validated by the gate before being indexed.
 - **Recovery:** repaired hit rate 100.00% / token F1 100.00% vs baseline 100.00% / 100.00%; repaired quality gate `PASS`.

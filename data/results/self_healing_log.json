@@ -1,0 +1,32 @@
+[
+  {
+    "detected_at": "2026-09-26T04:49:23.410527+00:00",
+    "stage": "corrupted",
+    "detected": {
+      "success": false,
+      "failed_expectations": [
+        "expect_column_values_to_be_unique",
+        "expect_column_value_lengths_to_be_between"
+      ],
+      "is_fresh": false,
+      "stale_ratio": 0.4091,
+      "row_count": 22
+    },
+    "attempts": [
+      {
+        "action": "rebuild_from_raw_snapshot",
+        "idempotent": true,
+        "result": {
+          "success": true,
+          "failed_expectations": [],
+          "is_fresh": true,
+          "stale_ratio": 0.0417,
+          "row_count": 24
+        }
+      }
+    ],
+    "resolved": true,
+    "action": "rebuild_from_raw_snapshot",
+    "resolved_at": "2026-09-26T04:49:23.564789+00:00"
+  }
+]

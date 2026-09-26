@@ -5,13 +5,13 @@ from typing import Any
 import pandas as pd
 
 from core.config import Settings, load_settings
-from core.utils import now_utc, read_json
+from core.utils import read_json
 from evaluation.metrics import EvaluationBundle, evaluate_pipeline
-from ingestion.cleaning import build_clean_dataframe
 from ingestion.corruption import corrupt_clean_dataframe
-from ingestion.crossref import load_raw_records
-from observability.quality import build_freshness_report, run_data_quality_checks
+from observability.dashboard import build_dashboard
+from observability.quality import build_freshness_report
 from observability.reporting import generate_corruption_report
+from observability.self_healing import rebuild_from_raw_snapshot, run_quality_gate_with_self_healing
 from pipelines.phase1 import run_phase1_pipeline, save_clean_artifacts
 from retrieval.index import LocalEmbeddingIndex
 
@@ -50,10 +50,7 @@ def repair_from_raw_snapshot(settings: Settings) -> tuple[pd.DataFrame, bool]:
     Chay cleaning 2 lan tren cung snapshot va so sanh de chung minh repair la idempotent,
     sau do ghi de artifacts `*_repaired` bang ban sach.
     """
-    run_date = now_utc()
-    records = load_raw_records(settings.paths.raw_records_json)
-    repaired = build_clean_dataframe(records, run_date)
-    idempotent = repaired.equals(build_clean_dataframe(records, run_date))
+    repaired, idempotent = rebuild_from_raw_snapshot(settings)
     save_clean_artifacts(repaired, settings.paths.repaired_clean_csv, settings.paths.repaired_clean_json)
     return repaired, idempotent
 
@@ -89,23 +86,26 @@ def run_corruption_flow_pipeline(settings: Settings) -> dict[str, Any]:
     _log("evaluate", f"corrupted hit_rate={corrupted_metrics['retrieval_hit_rate']:.3f} "
                      f"token_f1={corrupted_metrics['mean_token_f1']:.3f} (no exception raised)")
 
-    # 5. Quality gate + freshness tren corrupted data.
-    corrupted_quality = run_data_quality_checks(corrupted_df, settings, "corrupted")
+    # 5-6. Self-healing quality gate: phat hien corrupted data FAIL -> tu dong repair tu raw snapshot
+    #      (leo thang sang re-fetch API neu snapshot cung FAIL) -> validate lai truoc khi index.
     corrupted_freshness = build_freshness_report(
         corrupted_df, settings, paths.quality_dir / "corrupted_freshness_report.json"
     )
+    healing = run_quality_gate_with_self_healing(
+        corrupted_df, settings, "corrupted", repaired_report_name="repaired"
+    )
+    corrupted_quality, repaired_quality = healing.initial_quality, healing.final_quality
+    repaired_df, idempotent = healing.df, bool(healing.idempotent)
+    save_clean_artifacts(repaired_df, paths.repaired_clean_csv, paths.repaired_clean_json)
     _log("quality", f"corrupted gate={corrupted_quality['success']} failed={corrupted_quality['failed_expectations']}")
+    _log("self-heal", f"auto action={healing.action} -> {len(repaired_df)} rows, gate={repaired_quality['success']} "
+                      f"(idempotent={idempotent}, log -> {paths.self_healing_log.name})")
 
-    # 6. Repair tu raw snapshot.
-    repaired_df, idempotent = repair_from_raw_snapshot(settings)
-    _log("repair", f"{len(repaired_df)} rows rebuilt from {paths.raw_records_json.name} (idempotent={idempotent})")
-
-    # 7. Evaluate repaired dataset + quality gate.
+    # 7. Evaluate repaired dataset.
     _, repaired_bundle = _index_and_evaluate(
         repaired_df, settings, paths.repaired_embeddings_json, paths.repaired_metrics, paths.repaired_answers
     )
     repaired_metrics = repaired_bundle.summary
-    repaired_quality = run_data_quality_checks(repaired_df, settings, "repaired")
     repaired_freshness = build_freshness_report(
         repaired_df, settings, paths.quality_dir / "repaired_freshness_report.json"
     )
@@ -138,9 +138,13 @@ def run_corruption_flow_pipeline(settings: Settings) -> dict[str, Any]:
             "source": paths.raw_records_json.relative_to(paths.project_dir).as_posix(),
             "rows": len(repaired_df),
             "idempotent": idempotent,
+            "trigger": "automatically by the failed quality gate",
+            "action": healing.action,
         },
     )
     _log("report", str(paths.comparison_report))
+    build_dashboard(settings)
+    _log("dashboard", str(paths.dashboard_html))
 
     return {
         "baseline": baseline_metrics,
@@ -148,6 +152,7 @@ def run_corruption_flow_pipeline(settings: Settings) -> dict[str, Any]:
         "repaired": repaired_metrics,
         "quality_gates": gates,
         "repair_idempotent": idempotent,
+        "self_healing_action": healing.action,
     }
 
 
