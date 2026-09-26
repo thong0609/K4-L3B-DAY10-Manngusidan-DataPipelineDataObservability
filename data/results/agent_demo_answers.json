@@ -1,0 +1,32 @@
+[
+  {
+    "question": "What is the summary of the paper 'Agentic Retrieval-Augmented Generation for Knowledge-Intensive Tasks'?",
+    "answer": "Retrieval-Augmented Generation (RAG) significantly improves large language model accuracy by grounding responses in retrieved passages.",
+    "retrieved_titles": [
+      "Agentic Retrieval-Augmented Generation for Knowledge-Intensive Tasks",
+      "Advanced Perspectives on Agentic Retrieval-Augmented Generation for Knowledge-Intensive Tasks",
+      "Advanced Perspectives on Hybrid Search Architectures: Combining BM25 with Dense Representations",
+      "Hybrid Search Architectures: Combining BM25 with Dense Representations"
+    ]
+  },
+  {
+    "question": "Who authored the paper 'Mitigating Ghost Vectors in Dense Retrieval via Idempotent Indexing'?",
+    "answer": "Duc Vu, Thao Dang",
+    "retrieved_titles": [
+      "Mitigating Ghost Vectors in Dense Retrieval via Idempotent Indexing",
+      "Advanced Perspectives on Mitigating Ghost Vectors in Dense Retrieval via Idempotent Indexing",
+      "Hybrid Search Architectures: Combining BM25 with Dense Representations",
+      "Advanced Perspectives on Hybrid Search Architectures: Combining BM25 with Dense Representations"
+    ]
+  },
+  {
+    "question": "When was the paper 'Evaluating Retrieval Precision with Token F1 and LLM Judges' published?",
+    "answer": "2026-03-28",
+    "retrieved_titles": [
+      "Evaluating Retrieval Precision with Token F1 and LLM Judges",
+      "Advanced Perspectives on Evaluating Retrieval Precision with Token F1 and LLM Judges",
+      "Advanced Perspectives on Continuous Benchmark Evaluation for Enterprise Retrieval Pipelines",
+      "Continuous Benchmark Evaluation for Enterprise Retrieval Pipelines"
+    ]
+  }
+]

@@ -1,0 +1,89 @@
+{
+  "report_name": "corrupted",
+  "generated_at": "2026-09-26T04:05:07.193153+00:00",
+  "gx_version": "1.23.2",
+  "row_count": 22,
+  "success": false,
+  "expectations_success": false,
+  "failed_expectations": [
+    "expect_column_values_to_be_unique",
+    "expect_column_value_lengths_to_be_between"
+  ],
+  "checks": [
+    {
+      "expectation": "expect_table_row_count_to_be_between",
+      "column": null,
+      "success": true,
+      "observed_value": 22,
+      "unexpected_count": null,
+      "unexpected_percent": null,
+      "partial_unexpected_list": null
+    },
+    {
+      "expectation": "expect_column_values_to_not_be_null",
+      "column": "paper_id",
+      "success": true,
+      "observed_value": null,
+      "unexpected_count": 0,
+      "unexpected_percent": 0.0,
+      "partial_unexpected_list": []
+    },
+    {
+      "expectation": "expect_column_values_to_be_unique",
+      "column": "paper_id",
+      "success": false,
+      "observed_value": null,
+      "unexpected_count": 6,
+      "unexpected_percent": 27.27272727272727,
+      "partial_unexpected_list": [
+        "10.1145/3637528.3671818",
+        "10.1145/3637528.3671815",
+        "10.1145/3637528.3671806",
+        "10.1145/3637528.3671818",
+        "10.1145/3637528.3671815",
+        "10.1145/3637528.3671806"
+      ]
+    },
+    {
+      "expectation": "expect_column_values_to_not_be_null",
+      "column": "title",
+      "success": true,
+      "observed_value": null,
+      "unexpected_count": 0,
+      "unexpected_percent": 0.0,
+      "partial_unexpected_list": []
+    },
+    {
+      "expectation": "expect_column_values_to_not_be_null",
+      "column": "text_for_embedding",
+      "success": true,
+      "observed_value": null,
+      "unexpected_count": 0,
+      "unexpected_percent": 0.0,
+      "partial_unexpected_list": []
+    },
+    {
+      "expectation": "expect_column_value_lengths_to_be_between",
+      "column": "summary",
+      "success": false,
+      "observed_value": null,
+      "unexpected_count": 3,
+      "unexpected_percent": 13.636363636363635,
+      "partial_unexpected_list": [
+        "",
+        "",
+        ""
+      ]
+    }
+  ],
+  "freshness": {
+    "threshold_days": 180,
+    "max_stale_ratio": 0.25,
+    "latest_published": "2026-06-11",
+    "oldest_published": "2025-04-30",
+    "stale_rows": 9,
+    "total_rows": 22,
+    "stale_ratio": 0.4091,
+    "is_fresh": false
+  }
+}
