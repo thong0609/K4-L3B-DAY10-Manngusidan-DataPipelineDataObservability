@@ -20,6 +20,8 @@
 | --- | --- | --- | --- | --- |
 | Baseline Pipeline | `src/pipelines/phase1.py` — `run_phase1_pipeline()` | Settings, raw records | `data/reports/phase1_report.md`, `baseline_metrics.json` | Hoàn thành |
 | Corruption Flow | `src/pipelines/corruption_flow.py` — `run_corruption_flow_pipeline()` | Clean dataset, eval set | `data/reports/corruption_report.md`, bảng 3-state | Hoàn thành |
+| Cấu hình hệ thống | `core/config.py`, `core/utils.py` | Environment variables, config | Đối tượng `Settings`, utility functions | Hoàn thành |
+| Quản lý dự án & Tích hợp | Repository GitHub | Code từ các thành viên | Nhánh `main` nhất quán, artifact đầy đủ | Hoàn thành |
 
 ### Việc hỗ trợ ngoài phạm vi chính
 
@@ -35,6 +37,8 @@
 | --- | --- | --- | --- |
 | Kết nối Ingest → Clean → Index → Evaluate → Quality → Report | `phase1.py` | Pipeline chạy end-to-end, exit code 0 | `python script/run_phase1.py` |
 | Kết nối Corrupt → Re-index → Evaluate → Repair → Compare | `corruption_flow.py` | Bảng 3-state in ra console + file report | `python script/run_corruption_flow.py` |
+| Thiết lập cấu hình hệ thống & đường dẫn artifacts | `core/config.py`, `core/utils.py` | Quản lý path và setting linh hoạt | Đọc file code |
+| Kiểm tra tính nhất quán & theo dõi Contributor tracking | GitHub branch `main` | Source code tích hợp, không conflict | Xem lịch sử commit GitHub |
 | Sinh báo cáo markdown chi tiết Phase 1 | `data/reports/phase1_report.md` | 113 dòng, 6 section, đầy đủ số liệu | Xem file trực tiếp |
 | Sinh báo cáo so sánh 3 trạng thái | `data/reports/corruption_report.md` | Bảng Baseline/Corrupted/Repaired với delta | Xem file trực tiếp |
 
